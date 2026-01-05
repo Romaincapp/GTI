@@ -1,0 +1,129 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Asset {
+  id          String   @id @default(cuid())
+  symbol      String   @unique
+  name        String
+  assetType   String   // "SP500", "GOLD", etc.
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  notifications Notification[]
+  positions     Position[]
+
+  @@index([symbol])
+}
+
+model Notification {
+  id              String   @id @default(cuid())
+  assetId         String
+  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  // Market Data
+  currentPrice    Float
+  ma20            Float
+  ma50            Float
+  bollingerLower  Float
+  bollingerUpper  Float
+  bollingerMiddle Float
+
+  // Combo Indicators (ratio between MA and Bollinger Lower Band)
+  combo20         Float    // ma20 / bollingerLower (closer to 1 = strong signal)
+  combo50         Float    // ma50 / bollingerLower
+
+  // Signal Analysis
+  signalStrength  Float    // Overall signal strength 0-100
+  recommendation  String   // "STRONG_BUY", "BUY", "HOLD", "WAIT"
+  arguments       String   // JSON string with detailed arguments
+
+  // Investment Suggestion
+  suggestedAmount Float?   // Suggested amount to invest
+
+  // Status
+  status          String   @default("PENDING") // "PENDING", "APPROVED", "REJECTED", "EXECUTED"
+  viewed          Boolean  @default(false)
+  emailSent       Boolean  @default(false)
+
+  // Expert Validation (for future use)
+  expertApproval  String?  // "APPROVED", "REJECTED", null
+  expertComment   String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  position        Position?
+
+  @@index([assetId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Position {
+  id              String   @id @default(cuid())
+  notificationId  String   @unique
+  notification    Notification @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+
+  assetId         String
+  asset           Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  // Entry
+  entryDate       DateTime
+  entryPrice      Float
+  quantity        Float
+  investedAmount  Float
+
+  // Exit (optional)
+  exitDate        DateTime?
+  exitPrice       Float?
+
+  // P&L
+  realizedPnL     Float?   // Profit/Loss if closed
+  realizedPnLPct  Float?   // Percentage
+
+  status          String   @default("OPEN") // "OPEN", "CLOSED"
+
+  notes           String?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([assetId])
+  @@index([status])
+  @@index([entryDate])
+}
+
+model UserSettings {
+  id                    String   @id @default(cuid())
+
+  // Budget Management
+  annualBudget          Float    @default(1000)
+  monthlyMaxBudget      Float    @default(100)
+  currentMonthSpent     Float    @default(0)
+  currentYearSpent      Float    @default(0)
+
+  // Notification Preferences
+  emailNotifications    Boolean  @default(true)
+  minSignalStrength     Float    @default(70) // Only notify if signal >= this
+
+  // Risk Management
+  maxPositionSize       Float    @default(200) // Max amount per position
+  minCombo20            Float    @default(0.95) // Min combo20 to trigger notification
+  minCombo50            Float    @default(0.92) // Min combo50 to trigger notification
+
+  lastMonthReset        DateTime @default(now())
+  lastYearReset         DateTime @default(now())
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+}
